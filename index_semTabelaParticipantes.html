@@ -41,74 +41,8 @@ function obterCyberScore(item){if(item&&item.cyber_score!==undefined&&item.cyber
 function formatCyberScore(c){return Number(c||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function analiseSemCyberScore(txt){return String(txt||'').replace(/\s*•\s*CyberScore\s*:?\s*[\d\.]+/i,'')}
 function showModal({title='Aviso',body='',phone='',buttons=[]}){document.getElementById('modalTitle').textContent=title;document.getElementById('modalBody').innerHTML=body;const actions=document.getElementById('modalActions');actions.innerHTML='';const pw=document.getElementById('modalPhoneWrap'),pe=document.getElementById('modalPhone');if(phone){pw.classList.remove('hidden');pe.textContent=phone}else{pw.classList.add('hidden');pe.textContent=''}if(!buttons.length)buttons=[{text:'Entendi',className:'btn-secondary',onClick:()=>hideModal()}];buttons.forEach(btn=>{const b=document.createElement('button');b.type='button';b.textContent=btn.text;b.className=btn.className||'btn-secondary';b.onclick=()=>btn.onClick&&btn.onClick();actions.appendChild(b)});document.getElementById('modalBackdrop').classList.add('active')}function hideModal(){document.getElementById('modalBackdrop').classList.remove('active')}
-async function verificarUsuarioExistente(telefone){
-  const telefoneAtual = somenteDigitos(telefone);
-
-  const {data,error} = await supabaseClient
-    .from('participantes_evento')
-    .select('telefone');
-
-  if(error){
-    console.error('Erro ao verificar telefone:', error);
-    return false;
-  }
-
-  return (data || []).some(item =>
-    somenteDigitos(item.telefone) === telefoneAtual
-  );
-}
-async function salvarNoRanking(payload){
-  if(await verificarUsuarioExistente(payload.telefone)){
-    return {ok:false,motivo:'ja_existe'};
-  }
-
-  const participante = {
-    nome: payload.nome,
-    telefone: payload.telefone,
-    primeiro_dia: new Date().toISOString().slice(0,10)
-  };
-
-  const insParticipante = await supabaseClient
-    .from('participantes_evento')
-    .insert(participante);
-
-  if(insParticipante.error){
-    console.error(insParticipante.error);
-
-    if(insParticipante.error.code === '23505'){
-      return {ok:false,motivo:'ja_existe'};
-    }
-
-    return {ok:false,motivo:'erro'};
-  }
-
-  let {error} = await supabaseClient
-    .from('ranking')
-    .insert(payload);
-
-  if(error && String(error.message||'').toLowerCase().includes('cyber_score')){
-    const clone = {...payload};
-    delete clone.cyber_score;
-
-    const retry = await supabaseClient
-      .from('ranking')
-      .insert(clone);
-
-    error = retry.error;
-  }
-
-  if(error){
-    console.error(error);
-
-    if(error.code === '23505'){
-      return {ok:false,motivo:'ja_existe'};
-    }
-
-    return {ok:false,motivo:'erro'};
-  }
-
-  return {ok:true};
-}
+async function verificarUsuarioExistente(telefone){const telefoneAtual=somenteDigitos(telefone);const{data,error}=await supabaseClient.from('ranking').select('telefone');if(error){console.error('Erro ao verificar telefone:',error);return false}return(data||[]).some(item=>somenteDigitos(item.telefone)===telefoneAtual)}
+async function salvarNoRanking(payload){if(await verificarUsuarioExistente(payload.telefone))return{ok:false,motivo:'ja_existe'};let {error}=await supabaseClient.from('ranking').insert(payload);if(error&&String(error.message||'').toLowerCase().includes('cyber_score')){const clone={...payload};delete clone.cyber_score;const retry=await supabaseClient.from('ranking').insert(clone);error=retry.error}if(error){console.error(error);if(error.code==='23505')return{ok:false,motivo:'ja_existe'};return{ok:false,motivo:'erro'}}return{ok:true}}
 async function carregarRankingAdmin(){const{data,error}=await supabaseClient.from('ranking').select('*').not('tempo_valor','is',null).order('tempo_valor',{ascending:false}).order('timestamp',{ascending:true}).limit(100);if(error){console.error(error);return[]}return data||[]}async function usuarioEhAdmin(){const{data:userData}=await supabaseClient.auth.getUser();const user=userData?.user;if(!user)return false;const{data,error}=await supabaseClient.from('admins').select('user_id').eq('user_id',user.id).maybeSingle();return!error&&!!data}
 class App{constructor(){this.adminLogado=false;this.init()}init(){this.initRankingEnd();if(isDeviceLocked())document.getElementById('deviceLockBanner').classList.remove('hidden');setInterval(()=>{if(this.adminLogado&&document.getElementById('admin').classList.contains('active'))this.atualizarRankingAdmin()},5000);setInterval(()=>this.tickTV(),1000);this.frases();this.tabs();this.forms();this.senhaToggle();this.bindModalControls();this.adminPanel();this.verificarSessaoAdmin()}initRankingEnd(){const saved=localStorage.getItem('labstar_ranking_end');if(saved){rankingEnd=new Date(saved)}else{const d=new Date();d.setHours(21,0,0,0);rankingEnd=d;localStorage.setItem('labstar_ranking_end',d.toISOString())}}bindModalControls(){document.getElementById('modalClose').onclick=hideModal;document.getElementById('modalBackdrop').onclick=e=>{if(e.target.id==='modalBackdrop')hideModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape')hideModal()})}tabs(){document.querySelectorAll('.tab-btn').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));btn.classList.add('active');document.getElementById(btn.dataset.tab).classList.add('active');if(btn.dataset.tab==='admin'&&this.adminLogado)this.atualizarRankingAdmin()})}async verificarSessaoAdmin(){const{data}=await supabaseClient.auth.getSession();if(!data?.session)return;const admin=await usuarioEhAdmin();if(!admin)return;this.adminLogado=true;document.getElementById('adminLoginCard').classList.add('hidden');document.getElementById('adminPanel').classList.remove('hidden');this.syncEndInput();await this.atualizarRankingAdmin()}
 forms(){const nome=document.getElementById('nomeInput'),tel=document.getElementById('telInput'),pet=document.getElementById('petInput'),pai=document.getElementById('paiNascInput'),mae=document.getElementById('maeNascInput'),senha=document.getElementById('senhaInput');tel.addEventListener('input',()=>tel.value=formatarInputTelefone(tel.value));senha.addEventListener('input',()=>{if(senha.value.length>16)senha.value=senha.value.slice(0,16);document.getElementById('charCount').textContent=`${senha.value.length}/16`});document.getElementById('formPessoalSubmit').onsubmit=async e=>{e.preventDefault();if(isDeviceLocked()){showModal({title:'Participação já registrada',body:'<p>Este dispositivo já participou.</p>'});return}dadosPessoais={nome:nome.value.trim(),telefone:formatarInputTelefone(tel.value.trim()),pet:pet.value.trim(),paiNasc:pai.value,maeNasc:mae.value};if(!dadosPessoais.nome){showModal({title:'Nome obrigatório',body:'<p>Preencha o nome completo.</p>'});return}if(!telefoneValidoBR(dadosPessoais.telefone)){showModal({title:'Telefone inválido',body:'<p>Digite um telefone válido com DDD, no formato <strong>(11) 99999-9999</strong> ou <strong>(11) 9999-9999</strong>.</p>'});return}if(await verificarUsuarioExistente(dadosPessoais.telefone)){
