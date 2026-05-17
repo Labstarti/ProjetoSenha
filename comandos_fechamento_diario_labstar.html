@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comandos de Fechamento Diário - Labstar Cyber Arena</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:30px;line-height:1.6}.wrap{max-width:1050px;margin:auto;background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:30px;box-shadow:0 14px 42px rgba(15,23,42,.08)}h1{color:#1d4ed8;margin-top:0}h2{color:#075985;margin-top:30px;border-top:1px solid #e2e8f0;padding-top:22px}h3{color:#334155}pre{background:#020817;color:#dbeafe;padding:18px;border-radius:14px;overflow:auto;border:1px solid #1e293b}code{font-family:Consolas,Monaco,monospace}.ok{background:#dcfce7;border-left:5px solid #16a34a;padding:14px;border-radius:10px}.warn{background:#fef3c7;border-left:5px solid #f59e0b;padding:14px;border-radius:10px}.danger{background:#fee2e2;border-left:5px solid #ef4444;padding:14px;border-radius:10px}.box{background:#f1f5f9;border-left:5px solid #0ea5e9;padding:14px;border-radius:10px}ul,ol{padding-left:24px}.small{font-size:13px;color:#64748b}.tag{display:inline-block;background:#e0f2fe;color:#075985;font-weight:bold;border-radius:999px;padding:5px 10px;margin:3px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Comandos de Fechamento Diário — Labstar Cyber Arena</h1>
+<p class="small">Arquivo para guardar e usar no final de cada dia da feira.</p>
+<div><span class="tag">Final do dia</span><span class="tag">Supabase</span><span class="tag">Ranking diário</span><span class="tag">Histórico</span><span class="tag">Bloqueio 4 dias</span></div>
+
+<h2>Resumo rápido</h2>
+<div class="ok">
+<strong>No final de cada dia você usa estes comandos nesta ordem:</strong>
+<ol>
+<li>Copiar os telefones do ranking para <code>participantes_evento</code>.</li>
+<li>Arquivar o ranking do dia em <code>ranking_historico</code>.</li>
+<li>Conferir se os dados foram copiados.</li>
+<li>Limpar somente a tabela <code>ranking</code>.</li>
+</ol>
+</div>
+
+<h2>Importante: o que cada tabela faz</h2>
+<ul>
+<li><strong>ranking</strong>: ranking exibido na TV/painel do dia atual. Esta tabela pode ser limpa no final de cada dia.</li>
+<li><strong>participantes_evento</strong>: lista de telefones que já participaram na feira inteira. Esta tabela NÃO deve ser limpa durante os 4 dias reais.</li>
+<li><strong>ranking_historico</strong>: histórico/backup dos participantes de cada dia. Esta tabela NÃO deve ser limpa durante a feira.</li>
+</ul>
+
+<div class="danger">
+<strong>Nunca apague durante a feira real:</strong><br>
+<code>participantes_evento</code> e <code>ranking_historico</code>.<br>
+No final de cada dia real, limpe somente <code>ranking</code>.
+</div>
+
+<h2>Comando 1 — Marcar participantes do dia como já participantes da feira</h2>
+<p>Este comando copia nome e telefone do <code>ranking</code> para <code>participantes_evento</code>. Isso mantém o bloqueio nos próximos dias, mesmo depois de limpar o ranking diário.</p>
+<pre><code>INSERT INTO participantes_evento (
+  nome,
+  telefone,
+  primeiro_dia
+)
+SELECT
+  nome,
+  telefone,
+  CURRENT_DATE
+FROM ranking
+ON CONFLICT (telefone) DO NOTHING;</code></pre>
+
+<h2>Comando 2 — Arquivar ranking do dia no histórico</h2>
+<p>Este comando copia o ranking completo do dia para <code>ranking_historico</code>.</p>
+<pre><code>INSERT INTO ranking_historico (
+  nome,
+  telefone,
+  forca,
+  tempo_estimado,
+  tempo_valor,
+  cyber_score,
+  analise_resumo,
+  sugestoes_resumo,
+  timestamp,
+  dia_evento
+)
+SELECT
+  nome,
+  telefone,
+  forca,
+  tempo_estimado,
+  tempo_valor,
+  cyber_score,
+  analise_resumo,
+  sugestoes_resumo,
+  timestamp,
+  CURRENT_DATE
+FROM ranking;</code></pre>
+
+<h2>Se fechar depois da meia-noite</h2>
+<div class="warn">
+Se você rodar o fechamento depois da meia-noite, <code>CURRENT_DATE</code> pode registrar o dia seguinte. Nesse caso, use a data manual do dia da feira.
+</div>
+<p>Exemplo com data manual:</p>
+<pre><code>INSERT INTO ranking_historico (
+  nome,
+  telefone,
+  forca,
+  tempo_estimado,
+  tempo_valor,
+  cyber_score,
+  analise_resumo,
+  sugestoes_resumo,
+  timestamp,
+  dia_evento
+)
+SELECT
+  nome,
+  telefone,
+  forca,
+  tempo_estimado,
+  tempo_valor,
+  cyber_score,
+  analise_resumo,
+  sugestoes_resumo,
+  timestamp,
+  '2026-05-21'::date
+FROM ranking;</code></pre>
+
+<h2>Comando 3 — Conferir se copiou para participantes_evento</h2>
+<pre><code>SELECT COUNT(*) AS total_participantes_evento
+FROM participantes_evento;</code></pre>
+
+<p>Para ver os últimos registrados:</p>
+<pre><code>SELECT *
+FROM participantes_evento
+ORDER BY criado_em DESC;</code></pre>
+
+<h2>Comando 4 — Conferir se arquivou no histórico</h2>
+<pre><code>SELECT COUNT(*) AS total_arquivado_hoje
+FROM ranking_historico
+WHERE dia_evento = CURRENT_DATE;</code></pre>
+
+<p>Se você usou data manual, confira com a mesma data:</p>
+<pre><code>SELECT COUNT(*) AS total_arquivado_dia
+FROM ranking_historico
+WHERE dia_evento = '2026-05-21'::date;</code></pre>
+
+<h2>Comando 5 — Limpar somente o ranking do dia</h2>
+<div class="danger">
+Rode este comando somente depois de confirmar que os dados foram copiados para <code>participantes_evento</code> e <code>ranking_historico</code>.
+</div>
+<pre><code>TRUNCATE TABLE ranking;</code></pre>
+
+<h2>Sequência completa para final de dia real</h2>
+<div class="box">
+Use esta sequência quando o dia da feira terminar.
+</div>
+<pre><code>-- 1. Copiar telefones para bloqueio da feira inteira
+INSERT INTO participantes_evento (
+  nome,
+  telefone,
+  primeiro_dia
+)
+SELECT
+  nome,
+  telefone,
+  CURRENT_DATE
+FROM ranking
+ON CONFLICT (telefone) DO NOTHING;
+
+-- 2. Arquivar ranking do dia
+INSERT INTO ranking_historico (
+  nome,
+  telefone,
+  forca,
+  tempo_estimado,
+  tempo_valor,
+  cyber_score,
+  analise_resumo,
+  sugestoes_resumo,
+  timestamp,
+  dia_evento
+)
+SELECT
+  nome,
+  telefone,
+  forca,
+  tempo_estimado,
+  tempo_valor,
+  cyber_score,
+  analise_resumo,
+  sugestoes_resumo,
+  timestamp,
+  CURRENT_DATE
+FROM ranking;
+
+-- 3. Conferir participantes bloqueados
+SELECT COUNT(*) AS total_participantes_evento
+FROM participantes_evento;
+
+-- 4. Conferir histórico do dia
+SELECT COUNT(*) AS total_arquivado_hoje
+FROM ranking_historico
+WHERE dia_evento = CURRENT_DATE;
+
+-- 5. Limpar somente o ranking diário
+TRUNCATE TABLE ranking;</code></pre>
+
+<h2>Para teste/demonstração antes da feira</h2>
+<div class="warn">
+Se for apenas teste e você quiser repetir com as mesmas pessoas na segunda-feira, pode apagar a tabela <code>participantes_evento</code> depois da demonstração. Não faça isso durante a feira real.
+</div>
+<pre><code>DELETE FROM participantes_evento;</code></pre>
+
+<p>Se também quiser apagar os testes do ranking:</p>
+<pre><code>DELETE FROM ranking
+WHERE DATE(timestamp) = CURRENT_DATE;</code></pre>
+
+<p>Se você arquivou testes no histórico e quiser limpar apenas os testes de hoje:</p>
+<pre><code>DELETE FROM ranking_historico
+WHERE dia_evento = CURRENT_DATE;</code></pre>
+
+<h2>Checklist final do dia</h2>
+<ul>
+<li>Copiei <code>ranking</code> para <code>participantes_evento</code>.</li>
+<li>Copiei <code>ranking</code> para <code>ranking_historico</code>.</li>
+<li>Conferi a contagem do histórico.</li>
+<li>Conferi a contagem dos participantes bloqueados.</li>
+<li>Limpei somente <code>ranking</code>.</li>
+<li>Não apaguei <code>participantes_evento</code> durante a feira real.</li>
+<li>Não apaguei <code>ranking_historico</code> durante a feira real.</li>
+</ul>
+
+<h2>Resumo final</h2>
+<div class="ok">
+<strong>Final de cada dia real:</strong><br>
+1. <code>ranking → participantes_evento</code> para bloquear participação repetida.<br>
+2. <code>ranking → ranking_historico</code> para guardar o histórico do dia.<br>
+3. <code>TRUNCATE ranking</code> para zerar a TV/ranking do próximo dia.<br><br>
+<strong>Durante os 4 dias reais, não limpar:</strong> <code>participantes_evento</code> e <code>ranking_historico</code>.
+</div>
+</div>
+</body>
+</html>
