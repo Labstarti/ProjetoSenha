@@ -221,7 +221,38 @@ async function salvarNoRanking(payload){
 
   return {ok:true};
 }
-async function carregarRankingAdmin(){const{data,error}=await supabaseClient.from('ranking').select('*').not('tempo_valor','is',null).order('tempo_valor',{ascending:false}).order('timestamp',{ascending:true}).limit(100);if(error){console.error(error);return[]}return data||[]}async function usuarioEhAdmin(){const{data:userData}=await supabaseClient.auth.getUser();const user=userData?.user;if(!user)return false;const{data,error}=await supabaseClient.from('admins').select('user_id').eq('user_id',user.id).maybeSingle();return!error&&!!data}
+async function carregarRankingAdmin(){
+  const {data,error}=await supabaseClient
+    .from('ranking')
+    .select('*')
+    .not('tempo_valor','is',null)
+    .order('tempo_valor',{ascending:false})
+    .order('timestamp',{ascending:true})
+    .limit(100);
+
+  if(error){
+    console.error(error);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function contarParticipantesRanking(){
+  const {count,error}=await supabaseClient
+    .from('ranking')
+    .select('*',{count:'exact',head:true});
+
+  if(error){
+    console.error('Erro ao contar participantes:',error);
+    return null;
+  }
+
+  return count || 0;
+}
+
+async function usuarioEhAdmin(){
+const{data:userData}=await supabaseClient.auth.getUser();const user=userData?.user;if(!user)return false;const{data,error}=await supabaseClient.from('admins').select('user_id').eq('user_id',user.id).maybeSingle();return!error&&!!data}
 class App{constructor(){this.adminLogado=false;this.init()}init(){this.initRankingEnd();if(isDeviceLocked())document.getElementById('deviceLockBanner').classList.remove('hidden');setInterval(()=>{if(this.adminLogado&&document.getElementById('admin').classList.contains('active'))this.atualizarRankingAdmin()},5000);setInterval(()=>this.tickTV(),1000);this.frases();this.tabs();this.forms();this.senhaToggle();this.bindModalControls();this.adminPanel();this.verificarSessaoAdmin()}initRankingEnd(){const saved=localStorage.getItem('labstar_ranking_end');if(saved){rankingEnd=new Date(saved)}else{const d=new Date();d.setHours(21,0,0,0);rankingEnd=d;localStorage.setItem('labstar_ranking_end',d.toISOString())}}bindModalControls(){document.getElementById('modalClose').onclick=hideModal;document.getElementById('modalBackdrop').onclick=e=>{if(e.target.id==='modalBackdrop')hideModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape')hideModal()})}tabs(){document.querySelectorAll('.tab-btn').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));btn.classList.add('active');document.getElementById(btn.dataset.tab).classList.add('active');if(btn.dataset.tab==='admin'&&this.adminLogado)this.atualizarRankingAdmin()})}async verificarSessaoAdmin(){const{data}=await supabaseClient.auth.getSession();if(!data?.session)return;const admin=await usuarioEhAdmin();if(!admin)return;this.adminLogado=true;document.getElementById('adminLoginCard').classList.add('hidden');document.getElementById('adminPanel').classList.remove('hidden');this.syncEndInput();await this.atualizarRankingAdmin()}
 forms(){const nome=document.getElementById('nomeInput'),tel=document.getElementById('telInput'),pet=document.getElementById('petInput'),pai=document.getElementById('paiNascInput'),mae=document.getElementById('maeNascInput'),senha=document.getElementById('senhaInput');tel.addEventListener('input',()=>tel.value=formatarInputTelefone(tel.value));senha.addEventListener('input',()=>{if(senha.value.length>16)senha.value=senha.value.slice(0,16);document.getElementById('charCount').textContent=`${senha.value.length}/16`});document.getElementById('formPessoalSubmit').onsubmit=async e=>{e.preventDefault();if(isDeviceLocked()){showModal({title:'Participação já registrada',body:'<p>Este dispositivo já participou.</p>'});return}dadosPessoais={nome:nome.value.trim(),telefone:formatarInputTelefone(tel.value.trim()),pet:pet.value.trim(),paiNasc:pai.value,maeNasc:mae.value};if(!dadosPessoais.nome){showModal({title:'Nome obrigatório',body:'<p>Preencha o nome completo.</p>'});return}if(!telefoneValidoBR(dadosPessoais.telefone)){showModal({title:'Telefone inválido',body:'<p>Digite um telefone válido com DDD, no formato <strong>(11) 99999-9999</strong> ou <strong>(11) 9999-9999</strong>.</p>'});return}if(await verificarUsuarioExistente(dadosPessoais.telefone)){
 
@@ -553,7 +584,98 @@ score+=Math.min((a.uniqueRatio||0)*10,10);
 return Math.max(0,Math.min(100,Math.round(score)))
 }
 mostrarResultados(a,f,tempo,cyberScore){const bar=document.getElementById('barraForca'),txt=document.getElementById('textoForca'),cor=f<40?'#ef4444':f<70?'#f59e0b':'#10b981';bar.style.width=f+'%';bar.style.background=cor;txt.textContent=f<40?'🚨 FRACA':f<70?'⚠️ MÉDIA':'🛡️ FORTE';txt.style.color=cor;document.getElementById('tempoHacker').textContent=tempo;document.getElementById('cyberScoreResultado').innerHTML=`🧬 <strong>${cyberScore.toFixed(2)}</strong> pontos • critério técnico de desempate Labstar`;const an=[{ok:a.len>=16,text:`Comprimento: ${a.len}/16`},{ok:a.tipos>=3,text:`Variedade: ${a.tipos}/4 tipos`},{ok:!a.comum,text:a.comum?'Senha comum detectada':'Sem padrão comum'},{ok:!a.pessoal,text:a.pessoal?'Engenharia social detectada':'Sem dados pessoais detectados'}];if(a.concatPersonal)an.push({ok:false,text:'Combinação de dados pessoais detectada — cenário de ataque direcionado'});if(a.petParcial)an.push({ok:false,text:'Parte importante do nome do pet apareceu na senha'});if(a.petExato)an.push({ok:false,text:'Nome do pet apareceu na senha'});if(a.nomeParcial)an.push({ok:false,text:'Parte importante do nome apareceu na senha'});if(a.nomeExato)an.push({ok:false,text:'Nome completo apareceu na senha'});if(a.telDetectado)an.push({ok:false,text:'Parte do telefone apareceu na senha'});if(a.paiNascDetectado)an.push({ok:false,text:'Data de nascimento do pai apareceu na senha'});if(a.maeNascDetectado)an.push({ok:false,text:'Data de nascimento da mãe apareceu na senha'});document.getElementById('listaAnalise').innerHTML=an.map(i=>`<div class="item ${i.ok?'ok':'err'}">${i.ok?'✅':'❌'} ${i.text}</div>`).join('');const tips=[];if(a.len<16)tips.push('• Use 16 caracteres completos');if(a.tipos<3)tips.push('• Misture letras, números e símbolos');if(a.concatPersonal)tips.push('• Nunca combine nome + pet/telefone/data na mesma senha');if(a.petParcial||a.petExato)tips.push('• Evite variações do nome do pet');if(a.nomeParcial||a.nomeExato)tips.push('• Remova referências ao nome');if(a.telDetectado)tips.push('• Nunca use partes do telefone');document.getElementById('listaSugestoes').innerHTML=tips.length?tips.map(t=>`<div class="item tip">${t}</div>`).join(''):'<div class="item tip">🎉 Excelente padrão de senha!</div>';document.getElementById('resultadosDiv').classList.remove('hidden')}
-async atualizarRankingAdmin(){const lista=document.getElementById('listaRankingAdmin'),dados=await carregarRankingAdmin();dados.sort((a,b)=>{const tempoA=Number(a.tempo_valor)||0,tempoB=Number(b.tempo_valor)||0;if(tempoB!==tempoA)return tempoB-tempoA;const forcaA=Number(a.forca)||0,forcaB=Number(b.forca)||0;if(forcaB!==forcaA)return forcaB-forcaA;const cyberA=obterCyberScore(a),cyberB=obterCyberScore(b);if(cyberB!==cyberA)return cyberB-cyberA;const dataA=new Date(a.timestamp||0).getTime(),dataB=new Date(b.timestamp||0).getTime();return dataA-dataB});lastRanking=dados;if(!dados.length){lista.innerHTML='<tr><td colspan="7">Nenhum participante encontrado</td></tr>';return}this.renderMetrics(dados);this.renderPodium(dados);this.renderThreats(dados);this.updateWinner();const novos=dados.map(d=>d.nome),esc=s=>String(s||'-').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');lista.innerHTML=dados.map((item,i)=>{const classe=item.forca<40?'fraca':item.forca<70?'media':'forte',top=i===0?'top1':i===1?'top2':i===2?'top3':'',medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'',isNew=nomesAtuais.length&&!nomesAtuais.includes(item.nome),cyber=obterCyberScore(item);return`<tr class="fade-in-row ${top} ${isNew?'highlight-new':''}" style="animation-delay:${i*.045}s"><td><span class="rank-medal">${medal}</span> <strong>${i+1}º</strong></td><td><button class="name-btn" data-name="${esc(item.nome)}" data-tel="${esc(item.telefone)}">${esc(item.nome)}</button></td><td><span class="badge ${classe}">${item.forca||0}/100</span></td><td>${esc(normalizarTempoTexto(item.tempo_estimado))}</td><td><span class="cyber-badge">${formatCyberScore(cyber)}</span></td><td>${esc(analiseSemCyberScore(item.analise_resumo))}</td><td>${esc(item.sugestoes_resumo)}</td></tr>`}).join('');document.querySelectorAll('.name-btn').forEach(btn=>btn.onclick=()=>showModal({title:`Contato de ${btn.dataset.name}`,body:'<p>Telefone do participante selecionado:</p>',phone:btn.dataset.tel||'Não disponível'}));if(nomesAtuais.length&&novos.some(n=>!nomesAtuais.includes(n))){this.confetti();this.beep()}nomesAtuais=novos}renderMetrics(dados){document.getElementById('metricTotal').textContent=dados.length;document.getElementById('metricBest').textContent=normalizarTempoTexto(dados[0]?.tempo_estimado)||'—';const avg=Math.round(dados.reduce((s,d)=>s+(Number(d.forca)||0),0)/(dados.length||1));document.getElementById('metricAvg').textContent=avg+'/100'}renderPodium(d){[['podium1',0],['podium2',1],['podium3',2]].forEach(([id,i])=>{const el=document.getElementById(id),x=d[i];el.querySelector('.podium-name').textContent=x?.nome||'Aguardando';el.querySelector('.podium-time').textContent=x?`${normalizarTempoTexto(x.tempo_estimado)} • CyberScore ${formatCyberScore(obterCyberScore(x))}`:'—';if(!el.querySelector('.podium-score')){const s=document.createElement('div');s.className='podium-score';el.appendChild(s)}el.querySelector('.podium-score').textContent=x?`Força ${x.forca||0}/100`:''})}renderThreats(d){document.getElementById('threatPersonal').textContent=d.filter(x=>String(x.analise_resumo||'').includes('engenharia social')).length;document.getElementById('threatCommon').textContent=d.filter(x=>String(x.analise_resumo||'').includes('senha comum')).length;document.getElementById('threatSeq').textContent=d.filter(x=>String(x.analise_resumo||'').includes('sequências')).length;document.getElementById('threatStrong').textContent=d.filter(x=>(Number(x.forca)||0)>=70).length}
+async atualizarRankingAdmin(){
+  const lista = document.getElementById('listaRankingAdmin'),
+        dados = await carregarRankingAdmin(),
+        totalParticipantes = await contarParticipantesRanking();
+
+  dados.sort((a,b)=>{
+    const tempoA = Number(a.tempo_valor) || 0,
+          tempoB = Number(b.tempo_valor) || 0;
+
+    if(tempoB !== tempoA) return tempoB - tempoA;
+
+    const forcaA = Number(a.forca) || 0,
+          forcaB = Number(b.forca) || 0;
+
+    if(forcaB !== forcaA) return forcaB - forcaA;
+
+    const cyberA = obterCyberScore(a),
+          cyberB = obterCyberScore(b);
+
+    if(cyberB !== cyberA) return cyberB - cyberA;
+
+    const dataA = new Date(a.timestamp || 0).getTime(),
+          dataB = new Date(b.timestamp || 0).getTime();
+
+    return dataA - dataB;
+  });
+
+  lastRanking = dados;
+
+  if(!dados.length){
+    lista.innerHTML = '<tr><td colspan="7">Nenhum participante encontrado</td></tr>';
+    this.renderMetrics([], totalParticipantes);
+    return;
+  }
+
+  this.renderMetrics(dados, totalParticipantes);
+  this.renderPodium(dados);
+  this.renderThreats(dados);
+  this.updateWinner();
+
+  const novos = dados.map(d => d.nome),
+        esc = s => String(s || '-')
+          .replace(/&/g,'&amp;')
+          .replace(/</g,'&lt;')
+          .replace(/>/g,'&gt;')
+          .replace(/"/g,'&quot;');
+
+  lista.innerHTML = dados.map((item,i)=>{
+    const classe = item.forca < 40 ? 'fraca' : item.forca < 70 ? 'media' : 'forte',
+          top = i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : '',
+          medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '',
+          isNew = nomesAtuais.length && !nomesAtuais.includes(item.nome),
+          cyber = obterCyberScore(item);
+
+    return `<tr class="fade-in-row ${top} ${isNew?'highlight-new':''}" style="animation-delay:${i*.045}s">
+      <td><span class="rank-medal">${medal}</span> <strong>${i+1}º</strong></td>
+      <td><button class="name-btn" data-name="${esc(item.nome)}" data-tel="${esc(item.telefone)}">${esc(item.nome)}</button></td>
+      <td><span class="badge ${classe}">${item.forca || 0}/100</span></td>
+      <td>${esc(normalizarTempoTexto(item.tempo_estimado))}</td>
+      <td><span class="cyber-badge">${formatCyberScore(cyber)}</span></td>
+      <td>${esc(analiseSemCyberScore(item.analise_resumo))}</td>
+      <td>${esc(item.sugestoes_resumo)}</td>
+    </tr>`;
+  }).join('');
+
+  document.querySelectorAll('.name-btn').forEach(btn=>{
+    btn.onclick = () => showModal({
+      title:`Contato de ${btn.dataset.name}`,
+      body:'<p>Telefone do participante selecionado:</p>',
+      phone:btn.dataset.tel || 'Não disponível'
+    });
+  });
+
+  if(nomesAtuais.length && novos.some(n => !nomesAtuais.includes(n))){
+    this.confetti();
+    this.beep();
+  }
+
+  nomesAtuais = novos;
+}renderMetrics(dados,totalParticipantes){
+  document.getElementById('metricTotal').textContent =
+    totalParticipantes !== null ? totalParticipantes : dados.length;
+
+  document.getElementById('metricBest').textContent =
+    normalizarTempoTexto(dados[0]?.tempo_estimado) || '—';
+
+  const avg=Math.round(
+    dados.reduce((s,d)=>s+(Number(d.forca)||0),0)/(dados.length||1)
+  );
+
+  document.getElementById('metricAvg').textContent=avg+'/100';
+}renderPodium(d){[['podium1',0],['podium2',1],['podium3',2]].forEach(([id,i])=>{const el=document.getElementById(id),x=d[i];el.querySelector('.podium-name').textContent=x?.nome||'Aguardando';el.querySelector('.podium-time').textContent=x?`${normalizarTempoTexto(x.tempo_estimado)} • CyberScore ${formatCyberScore(obterCyberScore(x))}`:'—';if(!el.querySelector('.podium-score')){const s=document.createElement('div');s.className='podium-score';el.appendChild(s)}el.querySelector('.podium-score').textContent=x?`Força ${x.forca||0}/100`:''})}renderThreats(d){document.getElementById('threatPersonal').textContent=d.filter(x=>String(x.analise_resumo||'').includes('engenharia social')).length;document.getElementById('threatCommon').textContent=d.filter(x=>String(x.analise_resumo||'').includes('senha comum')).length;document.getElementById('threatSeq').textContent=d.filter(x=>String(x.analise_resumo||'').includes('sequências')).length;document.getElementById('threatStrong').textContent=d.filter(x=>(Number(x.forca)||0)>=70).length}
 syncEndInput(){const input=document.getElementById('rankingEndInput');const label=document.getElementById('rankingLabel');if(!input||!rankingEnd)return;const pad=n=>String(n).padStart(2,'0');input.value=`${rankingEnd.getFullYear()}-${pad(rankingEnd.getMonth()+1)}-${pad(rankingEnd.getDate())}T${pad(rankingEnd.getHours())}:${pad(rankingEnd.getMinutes())}`;if(label)label.textContent=`campeão às ${pad(rankingEnd.getHours())}:${pad(rankingEnd.getMinutes())}`}tickTV(){if(document.getElementById('admin').classList.contains('active')&&this.adminLogado){countdown--;if(countdown<=0)countdown=5;this.updateCountdown();this.updateWinner()}}updateCountdown(){const el=document.getElementById('rankingCountdown');if(!el||!rankingEnd)return;const diff=rankingEnd-new Date();if(diff<=0){el.textContent='ENCERRADO';return}const h=Math.floor(diff/3600000),m=Math.floor(diff%3600000/60000),s=Math.floor(diff%60000/1000);el.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`}updateWinner(){const banner=document.getElementById('winnerBanner');if(!banner||!rankingEnd)return;if(new Date()>=rankingEnd){const champ=lastRanking?.[0];banner.classList.remove('hidden');banner.textContent=champ?`🏆 Ranking encerrado! Campeão: ${champ.nome} • ${normalizarTempoTexto(champ.tempo_estimado)} • Força ${champ.forca||0}/100 • CyberScore ${formatCyberScore(obterCyberScore(champ))}`:'🏆 Ranking encerrado! Campeão: aguardando resultado...'}else banner.classList.add('hidden')}frases(){const frases=['🛡️ CyberSecurity começa por uma boa senha.','🛰️ Engenharia social transforma informação em risco.','⚡ Tecnologia protege, mas consciência fortalece.','🔐 Evite nomes, datas, telefone e pets em senhas.','🚨 Padrão previsível é porta aberta.'];setInterval(()=>{const el=document.getElementById('fraseSeguranca');if(el)el.textContent=frases[Math.floor(Math.random()*frases.length)]},3600)}confetti(){for(let i=0;i<46;i++){const e=document.createElement('div');e.className='confetti';e.style.left=Math.random()*100+'vw';e.style.background=['#00d9ff','#1d4ed8','#f59e0b','#10b981','#fff'][Math.floor(Math.random()*5)];e.style.animationDelay=Math.random()*.4+'s';document.body.appendChild(e);setTimeout(()=>e.remove(),2200)}}beep(){if(!somAtivo)return;try{const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=880;g.gain.value=.06;o.start();setTimeout(()=>{o.stop();ctx.close()},160)}catch(e){}}
 adminPanel(){document.getElementById('btnAtualizarAdmin').onclick=()=>this.atualizarRankingAdmin();document.getElementById('btnSom').onclick=()=>{somAtivo=!somAtivo;document.getElementById('btnSom').textContent=somAtivo?'🔊 Som ativado':'🔊 Som novo participante'};document.getElementById('btnFullscreen').onclick=()=>document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();document.getElementById('btnSalvarFim').onclick=()=>{const v=document.getElementById('rankingEndInput').value;if(!v)return;rankingEnd=new Date(v);localStorage.setItem('labstar_ranking_end',rankingEnd.toISOString());this.syncEndInput();this.updateCountdown();this.updateWinner();showModal({title:'Contagem configurada',body:`<p>Ranking encerrará em <strong>${rankingEnd.toLocaleString('pt-BR')}</strong>.</p>`})};document.getElementById('adminLogoutBtn').onclick=async()=>{await supabaseClient.auth.signOut();this.adminLogado=false;document.getElementById('adminPanel').classList.add('hidden');document.getElementById('adminLoginCard').classList.remove('hidden')};document.getElementById('adminLoginForm').onsubmit=async e=>{e.preventDefault();const email=document.getElementById('adminEmail').value.trim(),password=document.getElementById('adminPassword').value;const{error}=await supabaseClient.auth.signInWithPassword({email,password});if(error){showModal({title:'Acesso negado',body:'<p>E-mail ou senha inválidos.</p>'});return}const admin=await usuarioEhAdmin();if(!admin){await supabaseClient.auth.signOut();showModal({title:'Sem permissão',body:'<p>Usuário não cadastrado como administrador.</p>'});return}this.adminLogado=true;document.getElementById('adminLoginCard').classList.add('hidden');document.getElementById('adminPanel').classList.remove('hidden');this.syncEndInput();this.updateCountdown();await this.atualizarRankingAdmin()}}
 }
